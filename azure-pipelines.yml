@@ -59,6 +59,20 @@ stages:
         artifact: drop
         path: $(Pipeline.Workspace)\artifacts
 
+    # ========================
+    # Verify Node & npm
+    # ========================
+    - powershell: |
+        Write-Host "Verifying Node.js and npm on deploy agent..."
+        where node
+        where npm
+        node --version
+        npm --version
+      displayName: "Verify Node & npm on agent"
+
+    # ========================
+    # Deploy Node.js App
+    # ========================
     - powershell: |
         $deployPath = "C:\nodeapp"
         $artifactPath = "$(Pipeline.Workspace)\artifacts"
@@ -79,6 +93,6 @@ stages:
 
         Write-Host "Starting Node.js app..."
         # For testing only: runs in foreground
-        # In production, use PM2 or NSSM
+        # In production, use PM2 or NSSM to keep app alive
         Start-Process "node" "index.js"
       displayName: "Deploy Node.js App"
