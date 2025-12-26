@@ -2,14 +2,19 @@ trigger:
 - main   # pipeline runs on push to main branch
 
 stages:
+# =========================
+# BUILD STAGE
+# =========================
 - stage: Build
   displayName: "Build Node.js App"
   jobs:
   - job: BuildJob
+    displayName: "Build Job"
     pool:
       name: Default
       demands:
         - agent.name -equals PREM-NEW   # self-hosted agent for build
+
     steps:
     - checkout: self
 
@@ -21,27 +26,35 @@ stages:
     - script: npm install
       displayName: "Install Node.js dependencies"
 
-    # Optional: run tests
-    - script: npm test || echo "No tests defined"
+    # Skip tests (no tests defined yet)
+    - script: |
+        echo "Skipping tests (no tests defined yet)"
       displayName: "Run tests"
 
-    # Publish artifacts (your app files)
+    # Publish build artifacts
     - task: PublishPipelineArtifact@1
+      displayName: "Publish build artifacts"
       inputs:
         targetPath: '$(Build.SourcesDirectory)'
         artifact: 'drop'
 
+# =========================
+# DEPLOY STAGE
+# =========================
 - stage: Deploy
   displayName: "Deploy Node.js App to IIS VM"
   dependsOn: Build
   jobs:
   - job: DeployJob
+    displayName: "Deploy Job"
     pool:
       name: Default
       demands:
         - agent.name -equals IIS-VM   # self-hosted agent for deploy
+
     steps:
     - task: DownloadPipelineArtifact@2
+      displayName: "Download build artifacts"
       inputs:
         artifact: drop
         path: $(Pipeline.Workspace)\artifacts
@@ -51,7 +64,11 @@ stages:
         $artifactPath = "$(Pipeline.Workspace)\artifacts"
 
         Write-Host "Clearing old content..."
-        Get-ChildItem $deployPath -Recurse -Force | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+        if (Test-Path $deployPath) {
+          Get-ChildItem $deployPath -Recurse -Force | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+        } else {
+          New-Item -ItemType Directory -Path $deployPath
+        }
 
         Write-Host "Deploying new package..."
         Copy-Item -Path "$artifactPath\*" -Destination $deployPath -Recurse -Force
@@ -62,6 +79,6 @@ stages:
 
         Write-Host "Starting Node.js app..."
         # For testing only: runs in foreground
-        # In production, use PM2 or NSSM to keep app alive
+        # In production, use PM2 or NSSM
         Start-Process "node" "index.js"
       displayName: "Deploy Node.js App"
