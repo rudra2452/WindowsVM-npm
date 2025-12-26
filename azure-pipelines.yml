@@ -1,0 +1,67 @@
+trigger:
+- main   # pipeline runs on push to main branch
+
+stages:
+- stage: Build
+  displayName: "Build Node.js App"
+  jobs:
+  - job: BuildJob
+    pool:
+      name: Default
+      demands:
+        - agent.name -equals PREM-NEW   # self-hosted agent for build
+    steps:
+    - checkout: self
+
+    # Check Node.js version
+    - script: node --version
+      displayName: "Check Node.js version"
+
+    # Install dependencies
+    - script: npm install
+      displayName: "Install Node.js dependencies"
+
+    # Optional: run tests
+    - script: npm test || echo "No tests defined"
+      displayName: "Run tests"
+
+    # Publish artifacts (your app files)
+    - task: PublishPipelineArtifact@1
+      inputs:
+        targetPath: '$(Build.SourcesDirectory)'
+        artifact: 'drop'
+
+- stage: Deploy
+  displayName: "Deploy Node.js App to IIS VM"
+  dependsOn: Build
+  jobs:
+  - job: DeployJob
+    pool:
+      name: Default
+      demands:
+        - agent.name -equals IIS-VM   # self-hosted agent for deploy
+    steps:
+    - task: DownloadPipelineArtifact@2
+      inputs:
+        artifact: drop
+        path: $(Pipeline.Workspace)\artifacts
+
+    - powershell: |
+        $deployPath = "C:\nodeapp"
+        $artifactPath = "$(Pipeline.Workspace)\artifacts"
+
+        Write-Host "Clearing old content..."
+        Get-ChildItem $deployPath -Recurse -Force | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+
+        Write-Host "Deploying new package..."
+        Copy-Item -Path "$artifactPath\*" -Destination $deployPath -Recurse -Force
+
+        Write-Host "Installing dependencies..."
+        cd $deployPath
+        npm install
+
+        Write-Host "Starting Node.js app..."
+        # For testing only: runs in foreground
+        # In production, use PM2 or NSSM to keep app alive
+        Start-Process "node" "index.js"
+      displayName: "Deploy Node.js App"
